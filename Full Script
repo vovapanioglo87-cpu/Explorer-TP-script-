@@ -1,0 +1,648 @@
+-- // EXPLORER + ИЗБРАННОЕ + CLICK SELECT + EXPAND + LANGUAGES + MINIMIZE \\
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local mouse = player:GetMouse()
+
+-- // ЯЗЫКИ \\
+local LANGS = {
+    ru = {
+        title = "🔍 Explorer — Поиск, Телепорт, Избранное",
+        search = "Поиск объекта...",
+        clickOn = "🎯 Выбор кликом: ВКЛ",
+        clickOff = "🎯 Выбор кликом: ВЫКЛ",
+        refresh = "Обновить",
+        clearFav = "Очистить избранное",
+        clearSel = "Сбросить выбор",
+        selHeader = "📌 Выбрано кликом",
+        favHeader = "★ Избранное",
+        allHeader = "📋 Все объекты",
+    },
+    uk = {
+        title = "🔍 Explorer — Пошук, Телепорт, Обране",
+        search = "Пошук об'єкта...",
+        clickOn = "🎯 Вибір кліком: УВІМК",
+        clickOff = "🎯 Вибір кліком: ВИМК",
+        refresh = "Оновити",
+        clearFav = "Очистити обране",
+        clearSel = "Скинути вибір",
+        selHeader = "📌 Обрано кліком",
+        favHeader = "★ Обране",
+        allHeader = "📋 Усі об'єкти",
+    },
+    en = {
+        title = "🔍 Explorer — Search, Teleport, Favorites",
+        search = "Search object...",
+        clickOn = "🎯 Click Select: ON",
+        clickOff = "🎯 Click Select: OFF",
+        refresh = "Refresh",
+        clearFav = "Clear favorites",
+        clearSel = "Clear selection",
+        selHeader = "📌 Clicked",
+        favHeader = "★ Favorites",
+        allHeader = "📋 All Objects",
+    },
+    pt = {
+        title = "🔍 Explorer — Busca, Teleporte, Favoritos",
+        search = "Buscar objeto...",
+        clickOn = "🎯 Seleção por clique: ON",
+        clickOff = "🎯 Seleção por clique: OFF",
+        refresh = "Atualizar",
+        clearFav = "Limpar favoritos",
+        clearSel = "Limpar seleção",
+        selHeader = "📌 Selecionado por clique",
+        favHeader = "★ Favoritos",
+        allHeader = "📋 Todos os objetos",
+    },
+    de = {
+        title = "🔍 Explorer — Suche, Teleport, Favoriten",
+        search = "Objekt suchen...",
+        clickOn = "🎯 Klickauswahl: EIN",
+        clickOff = "🎯 Klickauswahl: AUS",
+        refresh = "Aktualisieren",
+        clearFav = "Favoriten löschen",
+        clearSel = "Auswahl zurücksetzen",
+        selHeader = "📌 Per Klick gewählt",
+        favHeader = "★ Favoriten",
+        allHeader = "📋 Alle Objekte",
+    },
+    zh = {
+        title = "🔍 资源管理器 — 搜索、传送、收藏",
+        search = "搜索对象...",
+        clickOn = "🎯 点击选择：开",
+        clickOff = "🎯 点击选择：关",
+        refresh = "刷新",
+        clearFav = "清除收藏",
+        clearSel = "清除选择",
+        selHeader = "📌 已点击选择",
+        favHeader = "★ 收藏",
+        allHeader = "📋 所有对象",
+    },
+    ja = {
+        title = "🔍 エクスプローラー — 検索、テレポート、お気に入り",
+        search = "オブジェクトを検索...",
+        clickOn = "🎯 クリック選択：オン",
+        clickOff = "🎯 クリック選択：オフ",
+        refresh = "更新",
+        clearFav = "お気に入りをクリア",
+        clearSel = "選択をクリア",
+        selHeader = "📌 クリックで選択",
+        favHeader = "★ お気に入り",
+        allHeader = "📋 すべてのオブジェクト",
+    },
+    fr = {
+        title = "🔍 Explorateur — Recherche, Téléportation, Favoris",
+        search = "Rechercher un objet...",
+        clickOn = "🎯 Sélection au clic : ON",
+        clickOff = "🎯 Sélection au clic : OFF",
+        refresh = "Actualiser",
+        clearFav = "Effacer les favoris",
+        clearSel = "Effacer la sélection",
+        selHeader = "📌 Sélectionné au clic",
+        favHeader = "★ Favoris",
+        allHeader = "📋 Tous les objets",
+    },
+}
+
+local LANG_ORDER = { "ru", "uk", "en", "pt", "de", "zh", "ja", "fr" }
+local LANG_FILE = "explorer_lang.txt"
+local currentLang = "ru"
+
+local function T(key)
+    local lang = LANGS[currentLang] or LANGS.ru
+    return lang[key] or LANGS.ru[key] or key
+end
+
+if isfile and isfile(LANG_FILE) then
+    local ok, data = pcall(readfile, LANG_FILE)
+    if ok and data and LANGS[data] then
+        currentLang = data
+    end
+end
+
+-- // ИЗБРАННОЕ \\
+local FAV_FILE = "explorer_favorites.txt"
+local favorites = setmetatable({}, { __mode = "k" })
+local expanded = setmetatable({}, { __mode = "k" })
+local selectedObjects = {}
+
+local function loadFavorites()
+    local paths = {}
+    if isfile and isfile(FAV_FILE) then
+        local ok, data = pcall(readfile, FAV_FILE)
+        if ok and data then
+            for line in string.gmatch(data, "[^\r\n]+") do
+                paths[line] = true
+            end
+        end
+    end
+    local claimed = {}
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("BasePart") or d:IsA("Model") then
+            local p = d:GetFullName()
+            if paths[p] and not claimed[p] then
+                favorites[d] = true
+                claimed[p] = true
+            end
+        end
+    end
+end
+
+local function saveFavorites()
+    if writefile then
+        local lines = {}
+        local seen = {}
+        for obj in pairs(favorites) do
+            if obj and obj.Parent then
+                local p = obj:GetFullName()
+                if not seen[p] then
+                    seen[p] = true
+                    table.insert(lines, p)
+                end
+            end
+        end
+        pcall(writefile, FAV_FILE, table.concat(lines, "\n"))
+    end
+end
+
+loadFavorites()
+
+local oldGui = playerGui:FindFirstChild("ObjectExplorerGUI")
+if oldGui then oldGui:Destroy() end
+local oldHl = Workspace:FindFirstChild("ExplorerSelectionHighlight")
+if oldHl then oldHl:Destroy() end
+
+local highlight = Instance.new("Highlight")
+highlight.Name = "ExplorerSelectionHighlight"
+highlight.FillColor = Color3.fromRGB(255, 180, 60)
+highlight.FillTransparency = 0.7
+highlight.OutlineColor = Color3.fromRGB(255, 220, 100)
+highlight.OutlineTransparency = 0
+highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+highlight.Parent = Workspace
+
+-- // GUI \\
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ObjectExplorerGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 540, 0, 640)
+mainFrame.Position = UDim2.new(0.5, -270, 0.5, -320)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+-- // КНОПКА РАЗВОРОТА (маленькая иконка, скрыта по умолчанию) \\
+local restoreBtn = Instance.new("TextButton")
+restoreBtn.Name = "RestoreBtn"
+restoreBtn.Size = UDim2.new(0, 50, 0, 50)
+restoreBtn.Position = UDim2.new(0, 20, 0.5, -25)
+restoreBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+restoreBtn.BorderSizePixel = 0
+restoreBtn.Text = "🔍"
+restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+restoreBtn.Font = Enum.Font.SourceSansBold
+restoreBtn.TextSize = 24
+restoreBtn.Visible = false
+restoreBtn.Active = true
+restoreBtn.Draggable = true
+restoreBtn.Parent = screenGui
+Instance.new("UICorner", restoreBtn).CornerRadius = UDim.new(1, 0)
+
+local restoreStroke = Instance.new("UIStroke")
+restoreStroke.Color = Color3.fromRGB(255, 180, 60)
+restoreStroke.Thickness = 2
+restoreStroke.Parent = restoreBtn
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -90, 0, 40)
+title.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+title.BorderSizePixel = 0
+title.Text = T("title")
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 16
+title.Parent = mainFrame
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 10)
+
+-- Кнопка языка
+local langBtn = Instance.new("TextButton")
+langBtn.Size = UDim2.new(0, 50, 0, 30)
+langBtn.Position = UDim2.new(1, -125, 0, 5)
+langBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 140)
+langBtn.BorderSizePixel = 0
+langBtn.Text = "🌐 " .. currentLang:upper()
+langBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+langBtn.Font = Enum.Font.SourceSansBold
+langBtn.TextSize = 13
+langBtn.Parent = title
+Instance.new("UICorner", langBtn).CornerRadius = UDim.new(0, 6)
+
+-- Кнопка сворачивания
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 30, 0, 30)
+minBtn.Position = UDim2.new(1, -70, 0, 5)
+minBtn.BackgroundColor3 = Color3.fromRGB(90, 140, 90)
+minBtn.BorderSizePixel = 0
+minBtn.Text = "—"
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.Font = Enum.Font.SourceSansBold
+minBtn.TextSize = 16
+minBtn.Parent = title
+Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0, 6)
+
+-- Кнопка закрытия
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextSize = 16
+closeBtn.Parent = title
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+closeBtn.MouseButton1Click:Connect(function()
+    highlight:Destroy()
+    screenGui:Destroy()
+end)
+
+-- // ЛОГИКА СВОРАЧИВАНИЯ \\
+minBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+    restoreBtn.Visible = true
+end)
+
+restoreBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = true
+    restoreBtn.Visible = false
+end)
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -180, 0, 35)
+searchBox.Position = UDim2.new(0, 10, 0, 50)
+searchBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+searchBox.BorderSizePixel = 0
+searchBox.PlaceholderText = T("search")
+searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+searchBox.Text = ""
+searchBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+searchBox.Font = Enum.Font.SourceSans
+searchBox.TextSize = 14
+searchBox.TextXAlignment = Enum.TextXAlignment.Left
+searchBox.ClearTextOnFocus = false
+searchBox.Parent = mainFrame
+Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 6)
+
+local clickSelectEnabled = false
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 160, 0, 35)
+toggleBtn.Position = UDim2.new(1, -170, 0, 50)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Text = T("clickOff")
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 12
+toggleBtn.Parent = mainFrame
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    clickSelectEnabled = not clickSelectEnabled
+    toggleBtn.Text = clickSelectEnabled and T("clickOn") or T("clickOff")
+    toggleBtn.BackgroundColor3 = clickSelectEnabled and Color3.fromRGB(60, 180, 80) or Color3.fromRGB(80, 80, 90)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not clickSelectEnabled then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+    local target = mouse.Target
+    if not target then return end
+    for _, obj in ipairs(selectedObjects) do
+        if obj == target then
+            refreshObjectList(searchBox.Text)
+            return
+        end
+    end
+    table.insert(selectedObjects, 1, target)
+    highlight.Adornee = target
+    refreshObjectList(searchBox.Text)
+end)
+
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, -20, 1, -140)
+scrollFrame.Position = UDim2.new(0, 10, 0, 95)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ScrollBarThickness = 6
+scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.Parent = mainFrame
+Instance.new("UICorner", scrollFrame).CornerRadius = UDim.new(0, 6)
+
+local yPos = 0
+
+local function teleportTo(obj)
+    local character = player.Character
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    local targetPosition
+    if obj:IsA("BasePart") then
+        targetPosition = obj.Position + Vector3.new(0, 3, 0)
+    elseif obj:IsA("Model") then
+        local pp = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+        if pp then targetPosition = pp.Position + Vector3.new(0, 3, 0) end
+    end
+    if targetPosition then
+        rootPart.CFrame = CFrame.new(targetPosition)
+    end
+end
+
+local function hasChildren(obj)
+    if not obj:IsA("Model") then return false end
+    for _, c in ipairs(obj:GetChildren()) do
+        if c:IsA("BasePart") or c:IsA("Model") then return true end
+    end
+    return false
+end
+
+local function renderHeader(text, color)
+    local h = Instance.new("TextLabel")
+    h.Size = UDim2.new(1, -10, 0, 22)
+    h.Position = UDim2.new(0, 5, 0, yPos)
+    h.BackgroundTransparency = 1
+    h.Text = text
+    h.TextColor3 = color or Color3.fromRGB(180, 180, 200)
+    h.Font = Enum.Font.SourceSansBold
+    h.TextSize = 13
+    h.TextXAlignment = Enum.TextXAlignment.Left
+    h.Parent = scrollFrame
+    yPos = yPos + 24
+end
+
+local function createRow(obj, indent, special)
+    indent = indent or 0
+    local rowHeight = indent > 0 and 26 or 30
+    local fullPath = obj:GetFullName()
+    local isFav = favorites[obj] and true or false
+    local baseColor = special and Color3.fromRGB(55, 45, 30) or Color3.fromRGB(45, 45, 55)
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -10 - indent, 0, rowHeight)
+    row.Position = UDim2.new(0, indent, 0, yPos)
+    row.BackgroundColor3 = baseColor
+    row.BorderSizePixel = 0
+    row.Parent = scrollFrame
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 5)
+    yPos = yPos + rowHeight + 4
+
+    local expandable = hasChildren(obj)
+    local expandWidth = expandable and 22 or 0
+
+    if expandable then
+        local expBtn = Instance.new("TextButton")
+        expBtn.Size = UDim2.new(0, 20, 0, rowHeight - 4)
+        expBtn.Position = UDim2.new(0, 2, 0, 2)
+        expBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 72)
+        expBtn.BorderSizePixel = 0
+        expBtn.Text = expanded[obj] and "▼" or "▶"
+        expBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        expBtn.Font = Enum.Font.SourceSansBold
+        expBtn.TextSize = 11
+        expBtn.Parent = row
+        Instance.new("UICorner", expBtn).CornerRadius = UDim.new(0, 4)
+        expBtn.MouseButton1Click:Connect(function()
+            expanded[obj] = not expanded[obj]
+            refreshObjectList(searchBox.Text)
+        end)
+    end
+
+    local btn = Instance.new("TextButton")
+    btn.Position = UDim2.new(0, expandWidth + 2, 0, 0)
+    btn.Size = UDim2.new(1, -(expandWidth + 38), 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = "  " .. obj.Name .. "  [" .. obj.ClassName .. "]"
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = indent > 0 and 12 or 13
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = row
+
+    btn.MouseEnter:Connect(function()
+        row.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
+    end)
+    btn.MouseLeave:Connect(function()
+        row.BackgroundColor3 = baseColor
+    end)
+
+    btn.MouseButton1Click:Connect(function()
+        teleportTo(obj)
+        row.BackgroundColor3 = Color3.fromRGB(80, 180, 80)
+        task.wait(0.3)
+        row.BackgroundColor3 = baseColor
+    end)
+
+    local starBtn = Instance.new("TextButton")
+    starBtn.Size = UDim2.new(0, 28, 0, rowHeight - 6)
+    starBtn.Position = UDim2.new(1, -32, 0, 3)
+    starBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+    starBtn.BorderSizePixel = 0
+    starBtn.Text = isFav and "★" or "☆"
+    starBtn.TextColor3 = isFav and Color3.fromRGB(255, 210, 60) or Color3.fromRGB(160, 160, 170)
+    starBtn.Font = Enum.Font.SourceSansBold
+    starBtn.TextSize = 16
+    starBtn.Parent = row
+    Instance.new("UICorner", starBtn).CornerRadius = UDim.new(0, 5)
+
+    starBtn.MouseButton1Click:Connect(function()
+        if favorites[obj] then
+            favorites[obj] = nil
+        else
+            favorites[obj] = true
+        end
+        saveFavorites()
+        task.wait(0.1)
+        refreshObjectList(searchBox.Text)
+    end)
+
+    if expandable and expanded[obj] then
+        for _, c in ipairs(obj:GetChildren()) do
+            if c:IsA("BasePart") or c:IsA("Model") then
+                createRow(c, indent + 20, false)
+            end
+        end
+    end
+end
+
+function refreshObjectList(filterText)
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+    yPos = 0
+
+    local validSelected = {}
+    for _, obj in ipairs(selectedObjects) do
+        if obj and obj.Parent then table.insert(validSelected, obj) end
+    end
+    selectedObjects = validSelected
+
+    local filterLower = filterText:lower()
+    local function matches(obj)
+        return filterText == "" or obj.Name:lower():find(filterLower)
+    end
+
+    if #selectedObjects > 0 then
+        renderHeader(T("selHeader"), Color3.fromRGB(255, 200, 120))
+        for _, obj in ipairs(selectedObjects) do
+            if matches(obj) then createRow(obj, 0, true) end
+        end
+    end
+
+    local allObjects = {}
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("BasePart") or d:IsA("Model") then
+            table.insert(allObjects, d)
+        end
+    end
+
+    table.sort(allObjects, function(a, b)
+        local aFav = favorites[a] and true or false
+        local bFav = favorites[b] and true or false
+        if aFav ~= bFav then return aFav end
+        return a.Name:lower() < b.Name:lower()
+    end)
+
+    local hasFav = false
+    for _, obj in ipairs(allObjects) do
+        if favorites[obj] and matches(obj) then
+            hasFav = true
+            break
+        end
+    end
+
+    if hasFav then
+        renderHeader(T("favHeader"), Color3.fromRGB(255, 210, 60))
+        local favCount = 0
+        for _, obj in ipairs(allObjects) do
+            if favorites[obj] and matches(obj) then
+                favCount = favCount + 1
+                if favCount > 100 then break end
+                createRow(obj, 0, false)
+            end
+        end
+    end
+
+    local otherCount = 0
+    local otherHeaderShown = false
+    for _, obj in ipairs(allObjects) do
+        if not favorites[obj] and matches(obj) then
+            if not otherHeaderShown then
+                renderHeader(T("allHeader"), Color3.fromRGB(180, 180, 200))
+                otherHeaderShown = true
+            end
+            otherCount = otherCount + 1
+            if otherCount > 200 then break end
+            createRow(obj, 0, false)
+        end
+    end
+
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 10)
+end
+
+local debounceToken = 0
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    debounceToken = debounceToken + 1
+    local t = debounceToken
+    task.delay(0.3, function()
+        if t == debounceToken then
+            refreshObjectList(searchBox.Text)
+        end
+    end)
+end)
+
+refreshObjectList("")
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(0, 100, 0, 30)
+refreshBtn.Position = UDim2.new(0, 10, 1, -40)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
+refreshBtn.BorderSizePixel = 0
+refreshBtn.Text = T("refresh")
+refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshBtn.Font = Enum.Font.SourceSansBold
+refreshBtn.TextSize = 13
+refreshBtn.Parent = mainFrame
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
+refreshBtn.MouseButton1Click:Connect(function() refreshObjectList(searchBox.Text) end)
+
+local clearFavBtn = Instance.new("TextButton")
+clearFavBtn.Size = UDim2.new(0, 150, 0, 30)
+clearFavBtn.Position = UDim2.new(0, 120, 1, -40)
+clearFavBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 60)
+clearFavBtn.BorderSizePixel = 0
+clearFavBtn.Text = T("clearFav")
+clearFavBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+clearFavBtn.Font = Enum.Font.SourceSansBold
+clearFavBtn.TextSize = 12
+clearFavBtn.Parent = mainFrame
+Instance.new("UICorner", clearFavBtn).CornerRadius = UDim.new(0, 6)
+clearFavBtn.MouseButton1Click:Connect(function()
+    favorites = setmetatable({}, { __mode = "k" })
+    saveFavorites()
+    refreshObjectList(searchBox.Text)
+end)
+
+local clearSelBtn = Instance.new("TextButton")
+clearSelBtn.Size = UDim2.new(0, 140, 0, 30)
+clearSelBtn.Position = UDim2.new(0, 280, 1, -40)
+clearSelBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 140)
+clearSelBtn.BorderSizePixel = 0
+clearSelBtn.Text = T("clearSel")
+clearSelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+clearSelBtn.Font = Enum.Font.SourceSansBold
+clearSelBtn.TextSize = 12
+clearSelBtn.Parent = mainFrame
+Instance.new("UICorner", clearSelBtn).CornerRadius = UDim.new(0, 6)
+clearSelBtn.MouseButton1Click:Connect(function()
+    selectedObjects = {}
+    highlight.Adornee = nil
+    refreshObjectList(searchBox.Text)
+end)
+
+-- // СМЕНА ЯЗЫКА \\
+local function applyLanguage()
+    title.Text = T("title")
+    searchBox.PlaceholderText = T("search")
+    toggleBtn.Text = clickSelectEnabled and T("clickOn") or T("clickOff")
+    refreshBtn.Text = T("refresh")
+    clearFavBtn.Text = T("clearFav")
+    clearSelBtn.Text = T("clearSel")
+    langBtn.Text = "🌐 " .. currentLang:upper()
+    refreshObjectList(searchBox.Text)
+end
+
+langBtn.MouseButton1Click:Connect(function()
+    local idx = 1
+    for i, code in ipairs(LANG_ORDER) do
+        if code == currentLang then idx = i break end
+    end
+    idx = idx % #LANG_ORDER + 1
+    currentLang = LANG_ORDER[idx]
+    if writefile then pcall(writefile, LANG_FILE, currentLang) end
+    applyLanguage()
+end)
+
+print("[Explorer] Загружено. Язык: " .. currentLang:upper())
